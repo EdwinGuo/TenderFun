@@ -1,0 +1,12 @@
+cityA south=cityB
+cityB north=cityA south=cityD
+cityC west=cityD south=cityL
+cityD north=cityB south=cityH west=cityE east=cityC
+cityE east=cityD south = cityG
+cityF east=cityG
+cityG north=cityE west=cityF
+cityH north=cityD south=cityI east=cityL
+cityI north=cityH south=cityJ
+cityJ north=cityI south=cityK
+cityK north=cityJ
+cityL north=cityC west=cityH
