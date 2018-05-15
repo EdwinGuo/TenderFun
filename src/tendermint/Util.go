@@ -43,12 +43,3 @@ func randCity(cities []string) string {
 	return cities[0]
 }
 
-func main() {
-	lookup := parseCity("/Users/edwinguo/edwin/TenderFun/src/test/testcase1.csv")
-	fmt.Println(len(lookup))
-	for a, b := range lookup {
-		fmt.Println("ppp: ", a, " ,", b)
-	}
-	
-}
-
