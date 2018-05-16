@@ -1,4 +1,4 @@
-package main
+package util
 
 import (
    "fmt"
@@ -8,7 +8,7 @@ import (
 
 // parseCity will parse a file and return a data structure  will serve the purpose of 
 // give a city and a directory, get the next city or empty string if not exist
-func parseCity(file string) map[string]map[string]string{
+func ParseCity(file string) map[string]map[string]string{
 	data := make(map[string]map[string]string)
 	b, err := ioutil.ReadFile(file)
    	 if err != nil {
@@ -38,7 +38,7 @@ func parseCity(file string) map[string]map[string]string{
         return data
 }
 
-func randCity(cities []string) string {
+func RandCity(cities []string) string {
 	//	TODO, update this so that return a city in a random fashion
 	return cities[0]
 }
