@@ -4,8 +4,11 @@ import (
         "fmt"
         "time"
         "strconv"
+        "flag"
         "tenderfun/tendermint/util"
 )
+
+// Assume that each Alien will start at a random city
 
 // AlienCommander is the head of all the aliens, it control
 // the moves of them, alien commander will only stop under three condition
@@ -106,16 +109,36 @@ func GenerateAliens(num int, cities []string) ([]Alien, map[string](Alien)) {
 }
 
 func main() {
-        cities := []string{"Toronto", "Tokyo", "London", "Chongqing", "HangZhou", "Shenyang"}
+        var numOfAliens int
+        var mapFile string
 
-        numOfAliens := 4
+        flag.IntVar(&numOfAliens, "numofaliens", 2, "a integer that indicate the number of of aliens")
+        flag.StringVar(&mapFile, "mapfile", "", "the file that contains the map and direction information")
+
+        flag.Parse()
+
+        cityLookup := util.ParseCity(mapFile)
+
+        fmt.Println("Hello there, there are total", len(cityLookup), " cities and ", numOfAliens, " aliens")
+
+        cities := make([]string, len(cityLookup))
+
+        // populate the cities
+        cnt := 0
+        for city, _ := range cityLookup {
+                cities[cnt] = city
+                cnt++
+        }
+
+        // TODO, change this back to 10000 once finished development
         numOfCommands := 10
 
         // start the commander:
         commandChannel := AlienCommander(numOfCommands)
 
         aliens, lookup := GenerateAliens(numOfAliens, cities)
-        fmt.Println(len(lookup))
+
+        fmt.Println(lookup)
 
         terminatorChan := make(chan int)
 
@@ -125,13 +148,12 @@ func main() {
 
         Terminator(terminatorChan, gateKeeperChan, numOfAliens)
 
-        fmt.Println(len(aliens))
-        go consumer(aliens[0].commandChan, terminatorChan)
-        go consumer(aliens[1].commandChan, terminatorChan)
-        go consumer(aliens[2].commandChan, terminatorChan)
-        go consumer(aliens[3].commandChan, terminatorChan)
+
+        for i :=0; i < numOfAliens; i++ {
+                go consumer(aliens[i].commandChan, terminatorChan)
+        }
 
         <-gateKeeperChan
         //time.Sleep(10* time.Second)
-        fmt.Println("Hello, playground")
+        fmt.Println("Cool, game finished, hope you enjoyed it!")
 }
