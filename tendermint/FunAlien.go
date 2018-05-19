@@ -5,7 +5,7 @@ import (
         "strconv"
         "flag"
         "tenderfun/tendermint/util"
-        "time"
+        //"time"
 )
 
 // Assume that each Alien will start at a random city
@@ -21,19 +21,21 @@ import (
 func AlienCommander(iters int, toCommanderSignalChan chan string, aliens map[Alien]int) <-chan int {
         c := make(chan int)
         go func() {
-                counter := 1
-                command, more := <-toCommanderSignalChan
-                if more {
-                        if (command == "continue" && counter < iters && len(aliens) > 0) {
-                                c <- counter
-                                counter++
-                                time.Sleep(10 * time.Second)
+                for {
+                        counter := 1
+                        command, more := <-toCommanderSignalChan
+                        if more {
+                                if (command == "continue" && counter < iters && len(aliens) > 0) {
+                                        c <- counter
+                                        counter++
+                                        //time.Sleep(1 * time.Second)
+                                } else {
+                                        close(c)
+                                }
                         } else {
+                                fmt.Println("All job are finished, commander is exiting.....")
                                 close(c)
                         }
-                } else {
-                        fmt.Println("All job are finished, commander is exiting.....")
-                        close(c)
                 }
         }()
         return c
@@ -121,7 +123,7 @@ func currentRoundFinish(aliens map[Alien]int) bool {
 }
 
 // aggregator is in charge of collect the info from alien consumer and send the signal to aliencommander
-func aggregator(ch chan Alien, toCommanderSignalChan chan string, aliens map[Alien]int, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool ) {
+func Aggregator(ch chan Alien, toCommanderSignalChan chan string, aliens map[Alien]int, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool ) {
         go func() {
                 fmt.Println("aggregator is in work...")
                 for {
@@ -277,21 +279,21 @@ func main() {
         // To notify commander that downstream are clear and ready to make the next move
         toCommanderSignalChan := make(chan string)
 
-        // to initialize the job
-        go func(){toCommanderSignalChan <- "continue"}()
-
-        // start the commander:
-        commandChannel := AlienCommander(numOfCommands, toCommanderSignalChan, aliens)
-
         terminatorChan := make(chan int)
 
         gateKeeperChan := make(chan bool)
 
         aggregatorSignalChan := make(chan Alien, len(aliens))
 
+        // to initialize the job
+        go func(){toCommanderSignalChan <- "continue"}()
+
+        // start the commander:
+        commandChannel := AlienCommander(numOfCommands, toCommanderSignalChan, aliens)
+
         PassCommandToAlien(commandChannel, aliens)
 
-        aggregator(aggregatorSignalChan, toCommanderSignalChan, aliens, cityLookup, cityAlienLookup)
+        Aggregator(aggregatorSignalChan, toCommanderSignalChan, aliens, cityLookup, cityAlienLookup)
 
         Terminator(terminatorChan, gateKeeperChan, numOfAliens)
 
