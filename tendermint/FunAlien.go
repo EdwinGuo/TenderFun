@@ -18,9 +18,22 @@ import (
 // 2) All the aliens are destroyed
 // 3) It exaust all the target iteration(10000)
 
-var commanderCounter = 1
 
-func AlienCommander(iters int, toCommanderSignalChan chan string, aliens map[Alien]int) <-chan int {
+// TODO, change this back to 10000 once finished development
+var numOfCommands = 3
+
+
+var commanderCounter = 1
+var aliens map[Alien]int
+var cityLookup map[string]map[string]bool
+var cityAlienLookup map[string]map[Alien]bool
+var toCommanderSignalChan chan string
+var terminatorChan chan int
+var gateKeeperChan chan bool
+
+var aggregatorSignalChan chan Alien
+
+func AlienCommander(iters int) <-chan int {
         c := make(chan int)
         go func() {
                 for {
@@ -48,6 +61,8 @@ func AlienCommander(iters int, toCommanderSignalChan chan string, aliens map[Ali
 func alienMove(alien Alien, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool) {
         neighbour := lookupCity[alien.city]
         city := util.RandMove(neighbour)
+        fmt.Println("Aggregator: what is the neighbour: ", neighbour, " for alien ", alien)
+        fmt.Println("Aggregator: what is the new city: ", city, " for alien ", alien)
         if city != "" {
                 // move to the new city
                 alien.city = city
@@ -71,6 +86,9 @@ func alienMove(alien Alien, lookupCity map[string]map[string]bool, cityAlienLook
 func cityCheckup(alien Alien, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool) {
         city := alien.city
         alis := cityAlienLookup[city]
+        fmt.Println("Aggregator: I'm in cityCheckup, aliens: ", aliens)
+        fmt.Println("Aggregator: I'm in cityCheckup, lookupCity", lookupCity)
+        fmt.Println("Aggregator: I'm in cityCheckup, cityAlienLookup",  cityAlienLookup)
 
         if (len(alis) > 1){
                 // Clean up and destroy
@@ -79,8 +97,10 @@ func cityCheckup(alien Alien, lookupCity map[string]map[string]bool, cityAlienLo
                 // and citya connect to cityb,
                 // then cityb must connect to citya
                 for alien, _ := range alis {
+                        fmt.Println("Aggregator: I'm in cityCheckup, and I'm close channels",  alis)
                         close(alien.commandChan)
                         delete(alis, alien)
+                        delete(aliens, alien)
                 }
 
                 delete(cityAlienLookup, city)
@@ -126,7 +146,7 @@ func currentRoundFinish(aliens map[Alien]int) bool {
 }
 
 // aggregator is in charge of collect the info from alien consumer and send the signal to aliencommander
-func Aggregator(ch chan Alien, toCommanderSignalChan chan string, aliens map[Alien]int, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool ) {
+func Aggregator(ch chan Alien) {
         go func() {
                 fmt.Println("aggregator is in work...")
                 for {
@@ -138,11 +158,13 @@ func Aggregator(ch chan Alien, toCommanderSignalChan chan string, aliens map[Ali
                                 // if able to move, then move and check the condition in the city
                                 // if there is a hit (two aliens in the same city), then update the lookupcity and
                                 // cityAlienlookup and destroy the alien
-                                alienMove(alien, lookupCity, cityAlienLookup)
+                                fmt.Println("Aggregator: I'm checking alien before the move: ", alien)
+                                alienMove(alien, cityLookup, cityAlienLookup)
+                                fmt.Println("Aggregator: I'm checking alien after the move: ", alien)
 
                                 aliens[alien]++
 
-                                cityCheckup(alien, lookupCity, cityAlienLookup)
+                                cityCheckup(alien, cityLookup, cityAlienLookup)
 
                                 // if all the alive aliens finish their current move, then
                                 // we flush the signal to the next commander for the next round
@@ -159,6 +181,7 @@ func Aggregator(ch chan Alien, toCommanderSignalChan chan string, aliens map[Ali
 
                         } else {
                                 toCommanderSignalChan <- "done"
+                                fmt.Println("ALl the aliens had been destroyed, terminating the game, done.....")
                                 close(ch)
                         }
                 }
@@ -166,24 +189,24 @@ func Aggregator(ch chan Alien, toCommanderSignalChan chan string, aliens map[Ali
 }
 
 
-func Terminator(terminatorChan <-chan int, donec chan bool, size int){
+func Terminator(size int){
         go func() {
                 total := 0
                 for {
-                        fmt.Println("start to working on my summing job.....", total)
+                        fmt.Println("Terminator: start to working on my summing job.....", total)
                         n, more := <-terminatorChan
-                        fmt.Println("I'm sumer and i'm about to served: ", n)
+                        fmt.Println("Terminator: I'm sumer and i'm about to served: ", n)
 
                         if more {
                                 total += n
-                                fmt.Println("I'm sumer, the current total is: ", total)
+                                fmt.Println("Terminator: I'm sumer, the current total is: ", total)
                                 if total == size{
-                                        donec <- true
+                                        gateKeeperChan <- true
                                 }
 
                         } else {
-                                fmt.Println("I'm done yo....: ", n)
-                                donec <- true
+                                fmt.Println("Terminator: I'm done yo....: ", n)
+                                gateKeeperChan <- true
                                 return
                         }
                 }
@@ -191,20 +214,19 @@ func Terminator(terminatorChan <-chan int, donec chan bool, size int){
 }
 
 // This function is to fan out the command to the aliens from the commander
-func PassCommandToAlien(ch <-chan int, aliens map[Alien]int) {
+func PassCommandToAlien(ch <-chan int) {
         go func() {
-                fmt.Println("sup yo")
+                fmt.Println("PassCommandToAlien: I'm in work mode now")
                 for i := range ch {
-                        fmt.Println("sup ... ", i)
                         for alien, _ := range aliens {
                                 alien.commandChan <- i
                         }
                 }
 
-                fmt.Println("done here")
-
+                fmt.Println("PassCommandToAlien: I'm done here...")
                 for alien, _ := range aliens {
                         // close all our fanOut channels when the input channel is exhausted.
+                        fmt.Println("PassCommandToAlien: Work done now, close channels")
                         close(alien.commandChan)
                 }
         }()
@@ -219,7 +241,7 @@ type Alien struct {
 
 func GenerateAliens(num int, cities []string) map[Alien]int {
         // use the int to keep track of which round the alien is at
-        aliens := make(map[Alien]int)
+        alis := make(map[Alien]int)
 
         for ali := 1; ali <= num; ali++ {
                 name := "Alien-" + strconv.Itoa(ali)
@@ -227,13 +249,14 @@ func GenerateAliens(num int, cities []string) map[Alien]int {
                 city := util.RandCity(cities)
                 alien := Alien{name, ch, city}
                 // initialize with 0
-                aliens[alien] = 0
+                alis[alien] = 0
         }
-        return aliens
+        fmt.Println("Factory, my aliens: ", alis)
+        return alis
 }
 
 // generate a map that for a given city, ablt to check what aliens are in the city
-func GenerateCityALienLookup(aliens map[Alien]int, cityLookup map[string]map[string]bool) map[string]map[Alien]bool {
+func GenerateCityALienLookup(aliens map[Alien]int) map[string]map[Alien]bool {
         result := make(map[string](map[Alien]bool), len(cityLookup))
         for city, _ := range cityLookup {
                 for alien, _ := range aliens {
@@ -247,7 +270,33 @@ func GenerateCityALienLookup(aliens map[Alien]int, cityLookup map[string]map[str
         return result
 }
 
-// TODO< to check when one interation is finished, we need to signal the commander
+
+func initParas(numOfAliens int, mapFile string) {
+        cityLookup = util.ParseCity(mapFile)
+        cities := make([]string, len(cityLookup))
+
+        // populate the cities
+        cnt := 0
+        for city, _ := range cityLookup {
+                cities[cnt] = city
+                cnt++
+        }
+
+        aliens = GenerateAliens(numOfAliens, cities)
+
+        // given a city, which alien(s) is/are there
+        cityAlienLookup = GenerateCityALienLookup(aliens)
+
+        // To notify commander that downstream are clear and ready to make the next move
+        toCommanderSignalChan = make(chan string)
+
+        terminatorChan = make(chan int)
+
+        gateKeeperChan = make(chan bool)
+
+        aggregatorSignalChan = make(chan Alien)
+}
+
 
 func main() {
         var numOfAliens int
@@ -258,47 +307,21 @@ func main() {
 
         flag.Parse()
 
-        cityLookup := util.ParseCity(mapFile)
+        initParas(numOfAliens, mapFile)
 
         fmt.Println("Hello there, there are total", len(cityLookup), " cities and ", numOfAliens, " aliens")
-
-        cities := make([]string, len(cityLookup))
-
-        // populate the cities
-        cnt := 0
-        for city, _ := range cityLookup {
-                cities[cnt] = city
-                cnt++
-        }
-
-        // TODO, change this back to 10000 once finished development
-        numOfCommands := 10
-
-        aliens := GenerateAliens(numOfAliens, cities)
-
-        // given a city, which alien(s) is/are there
-        cityAlienLookup := GenerateCityALienLookup(aliens, cityLookup)
-
-        // To notify commander that downstream are clear and ready to make the next move
-        toCommanderSignalChan := make(chan string)
-
-        terminatorChan := make(chan int)
-
-        gateKeeperChan := make(chan bool)
-
-        aggregatorSignalChan := make(chan Alien, len(aliens))
 
         // to initialize the job
         go func(){toCommanderSignalChan <- "continue"}()
 
         // start the commander:
-        commandChannel := AlienCommander(numOfCommands, toCommanderSignalChan, aliens)
+        commandChannel := AlienCommander(numOfCommands)
 
-        PassCommandToAlien(commandChannel, aliens)
+        PassCommandToAlien(commandChannel)
 
-        Aggregator(aggregatorSignalChan, toCommanderSignalChan, aliens, cityLookup, cityAlienLookup)
+        Aggregator(aggregatorSignalChan)
 
-        Terminator(terminatorChan, gateKeeperChan, numOfAliens)
+        Terminator(numOfAliens)
 
         for alien, _ := range aliens {
                 go consumer(alien, terminatorChan, aggregatorSignalChan)
