@@ -18,22 +18,25 @@ import (
 // 2) All the aliens are destroyed
 // 3) It exaust all the target iteration(10000)
 
+var commanderCounter = 1
+
 func AlienCommander(iters int, toCommanderSignalChan chan string, aliens map[Alien]int) <-chan int {
         c := make(chan int)
         go func() {
                 for {
                         counter := 1
                         command, more := <-toCommanderSignalChan
+                        fmt.Printf("AlienCommander: I will trigger the %dth round of attack\n", commanderCounter)
                         if more {
-                                if (command == "continue" && counter < iters && len(aliens) > 0) {
+                                if (command == "continue" && commanderCounter < iters && len(aliens) > 0) {
                                         c <- counter
-                                        counter++
+                                        commanderCounter++
                                         //time.Sleep(1 * time.Second)
                                 } else {
                                         close(c)
                                 }
                         } else {
-                                fmt.Println("All job are finished, commander is exiting.....")
+                                fmt.Println("AlienCommander: All job are finished, commander is exiting.....")
                                 close(c)
                         }
                 }
