@@ -24,7 +24,7 @@ var numOfCommands = 3
 
 
 var commanderCounter = 1
-var aliens map[Alien]int
+var aliens map[Alien]Status
 var cityLookup map[string]map[string]bool
 var cityAlienLookup map[string]map[Alien]bool
 var toCommanderSignalChan chan string
@@ -59,13 +59,15 @@ func AlienCommander(iters int) <-chan int {
 
 
 func alienMove(alien Alien, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool) {
-        neighbour := lookupCity[alien.city]
+        neighbour := lookupCity[aliens[alien].city]
         city := util.RandMove(neighbour)
-        fmt.Println("Aggregator: what is the neighbour: ", neighbour, " for alien ", alien)
-        fmt.Println("Aggregator: what is the new city: ", city, " for alien ", alien)
+        fmt.Println("Aggregator: what is the neighbour: ", neighbour, " for alien ", aliens[alien])
+        fmt.Println("Aggregator: what is the new city: ", city, " for alien ", aliens[alien])
         if city != "" {
                 // move to the new city
-                alien.city = city
+                status := aliens[alien]
+                status.city = city
+                aliens[alien] = status
                 // update cityAlienlookup
                 aliensLookup := cityAlienLookup[city]
                 if len(aliensLookup) == 0{
@@ -84,7 +86,7 @@ func alienMove(alien Alien, lookupCity map[string]map[string]bool, cityAlienLook
 // neighbour and also update cityAlienlookup to remove the destroyed aliens
 // and cities
 func cityCheckup(alien Alien, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool) {
-        city := alien.city
+        city := aliens[alien].city
         alis := cityAlienLookup[city]
         fmt.Println("Aggregator: I'm in cityCheckup, aliens: ", aliens)
         fmt.Println("Aggregator: I'm in cityCheckup, lookupCity", lookupCity)
@@ -114,28 +116,27 @@ func cityCheckup(alien Alien, lookupCity map[string]map[string]bool, cityAlienLo
 }
 
 func consumer(alien Alien, terminatorChan chan int, aggregatorSignalChan chan Alien) {
-        fmt.Println("Alien ", alien.name, " had been activated")
         for {
                 _, more := <-alien.commandChan
                 if more {
-                        fmt.Println("Alien ", alien.name, " is in motion!")
+                        fmt.Println("Consumer: Alien ", alien.name, "had been activated and is in motion!")
                         aggregatorSignalChan <- alien
                 } else {
-                        fmt.Println("I'm done: ", alien.name)
+                        fmt.Println("Consumer: I'm done: ", alien.name)
                         terminatorChan <- 1
                         return
                 }
         }
 }
 
-func currentRoundFinish(aliens map[Alien]int) bool {
+func currentRoundFinish() bool {
         marker := 0
         index := 0
-        for _, round := range aliens {
+        for _, status := range aliens {
                 if index == 0 {
-                        marker = round
+                        marker = status.counter
                 } else {
-                        if round != marker {
+                        if status.counter != marker {
                                 return false
                         }
                 }
@@ -148,21 +149,23 @@ func currentRoundFinish(aliens map[Alien]int) bool {
 // aggregator is in charge of collect the info from alien consumer and send the signal to aliencommander
 func Aggregator(ch chan Alien) {
         go func() {
-                fmt.Println("aggregator is in work...")
+                fmt.Println("Aggregator, I'm in work...")
                 for {
                         alien, more := <- ch
                         if more{
-                                fmt.Println("aggregator receive work...")
+                                fmt.Println("Aggregator: receive work...")
 
                                 // make the move
                                 // if able to move, then move and check the condition in the city
                                 // if there is a hit (two aliens in the same city), then update the lookupcity and
                                 // cityAlienlookup and destroy the alien
-                                fmt.Println("Aggregator: I'm checking alien before the move: ", alien)
+                                fmt.Println("Aggregator: I'm checking alien before the move: ", aliens[alien])
                                 alienMove(alien, cityLookup, cityAlienLookup)
-                                fmt.Println("Aggregator: I'm checking alien after the move: ", alien)
+                                fmt.Println("Aggregator: I'm checking alien after the move: ", aliens[alien])
 
-                                aliens[alien]++
+                                status := aliens[alien]
+                                status.counter++
+                                aliens[alien] = status
 
                                 cityCheckup(alien, cityLookup, cityAlienLookup)
 
@@ -172,7 +175,7 @@ func Aggregator(ch chan Alien) {
                                 if (len(aliens) == 0) {
                                         fmt.Println("ALl the aliens had been destroyed, terminating the game")
                                         close(ch)
-                                } else if (currentRoundFinish(aliens)){
+                                } else if (currentRoundFinish()){
                                         fmt.Println("ALl aliens had made their move for the current round... Next round will start shortly...")
                                         toCommanderSignalChan <- "continue"
                                 } else {
@@ -236,31 +239,36 @@ func PassCommandToAlien(ch <-chan int) {
 type Alien struct {
         name        string
         commandChan chan int
-        city  string
 }
 
-func GenerateAliens(num int, cities []string) map[Alien]int {
+type Status struct{
+        city string
+        counter int
+}
+
+func GenerateAliens(num int, cities []string) map[Alien]Status {
         // use the int to keep track of which round the alien is at
-        alis := make(map[Alien]int)
+        alis := make(map[Alien]Status)
 
         for ali := 1; ali <= num; ali++ {
                 name := "Alien-" + strconv.Itoa(ali)
                 ch := make(chan int)
                 city := util.RandCity(cities)
-                alien := Alien{name, ch, city}
+                alien := Alien{name, ch}
+                status := Status{city, 0}
                 // initialize with 0
-                alis[alien] = 0
+                alis[alien] = status
         }
         fmt.Println("Factory, my aliens: ", alis)
         return alis
 }
 
 // generate a map that for a given city, ablt to check what aliens are in the city
-func GenerateCityALienLookup(aliens map[Alien]int) map[string]map[Alien]bool {
+func GenerateCityALienLookup(aliens map[Alien]Status) map[string]map[Alien]bool {
         result := make(map[string](map[Alien]bool), len(cityLookup))
         for city, _ := range cityLookup {
-                for alien, _ := range aliens {
-                        if alien.city == city {
+                for alien, status := range aliens {
+                        if status.city == city {
                                 m := make(map[Alien]bool)
                                 m[alien] = true
                                 result[city] = m
@@ -269,7 +277,6 @@ func GenerateCityALienLookup(aliens map[Alien]int) map[string]map[Alien]bool {
         }
         return result
 }
-
 
 func initParas(numOfAliens int, mapFile string) {
         cityLookup = util.ParseCity(mapFile)
@@ -328,6 +335,5 @@ func main() {
         }
 
         <-gateKeeperChan
-        //time.Sleep(10* time.Second)
         fmt.Println("Cool, game finished, hope you enjoyed it!")
 }
