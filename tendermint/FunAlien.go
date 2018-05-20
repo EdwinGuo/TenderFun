@@ -174,15 +174,16 @@ func Aggregator() {
                                 // if there is a hit (two aliens in the same city), then update the lookupcity and
                                 // cityAlienlookup and destroy the alien
                                 fmt.Println("Aggregator: I'm checking alien before the move: ", aliens[alien])
-                                alienMove(alien, cityLookup, cityAlienLookup)
-                                fmt.Println("Aggregator: I'm checking alien after the move: ", aliens[alien])
+                                if _, ok := aliens[alien]; ok {
+                                        alienMove(alien, cityLookup, cityAlienLookup)
+                                        fmt.Println("Aggregator: I'm checking alien after the move: ", aliens[alien])
 
-                                status := aliens[alien]
-                                status.counter++
-                                aliens[alien] = status
+                                        status := aliens[alien]
+                                        status.counter++
+                                        aliens[alien] = status
 
-                                cityCheckup(alien, cityLookup, cityAlienLookup)
-
+                                        cityCheckup(alien, cityLookup, cityAlienLookup)
+                                }
                         } else {
                                 toCommanderSignalChan <- "done"
                                 fmt.Println("ALl the aliens had been destroyed, terminating the game, done.....")
@@ -249,6 +250,7 @@ func PassCommandToAlien(ch <-chan int) {
                 for i := range ch {
                         fmt.Println("PassCommandToAlien: what is the aliens now:", aliens)
                         for alien, _ := range aliens {
+                                fmt.Println("PassCommandToAlien: sending to which alien:", alien)
                                 alien.commandChan <- i
                         }
                 }
