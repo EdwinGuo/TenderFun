@@ -1,6 +1,6 @@
 # TenderFun
 A challenge from Tendermint
-
+![alt text](https://github.com/EdwinGuo/TenderFun/blob/master/HighLevelDiagram.png)
 Alien invasion
 ==============
 Mad aliens are about to invade the earth and you are tasked with simulating the
