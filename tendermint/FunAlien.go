@@ -5,6 +5,7 @@ import (
         "strconv"
         "flag"
         "tenderfun/tendermint/util"
+        "strings"
         //"time"
 )
 
@@ -27,10 +28,13 @@ var aliens map[Alien]Status
 var cityLookup map[string]map[string]bool
 var cityAlienLookup map[string]map[Alien]bool
 var toCommanderSignalChan chan string
-var terminatorChan chan int
+var terminatorChan chan string
 var gateKeeperChan chan bool
 
 var aggregatorSignalChan chan Alien
+var terminatorSumChan chan string
+var terminatorListDone  map[string]bool
+var terminatorListReady  map[string]bool
 
 func AlienCommander(iters int) <-chan int {
         c := make(chan int)
@@ -57,28 +61,11 @@ func AlienCommander(iters int) <-chan int {
         return c
 }
 
-func currentRoundFinish() bool {
-        marker := 0
-        index := 0
-        for _, status := range aliens {
-                if index == 0 {
-                        marker = status.counter
-                } else {
-                        if status.counter != marker {
-                                return false
-                        }
-                }
-                index++
-        }
-
-        return true
-}
-
 func alienMove(alien Alien, lookupCity map[string]map[string]bool, cityAlienLookup map[string]map[Alien]bool) {
         oldCity := aliens[alien].city
         neighbour := lookupCity[oldCity]
         fmt.Println("Aggregator: what is the neighbour: ", neighbour, " for alien ", alien, ",", aliens[alien])
-
+        if len(neighbour) == 0 {return}
         city := util.RandMove(neighbour)
         fmt.Println("Aggregator: what is the new city: ", city, " for alien ", aliens[alien])
         if city != "" {
@@ -125,7 +112,6 @@ func cityCheckup(alien Alien, lookupCity map[string]map[string]bool, cityAlienLo
                 // then cityb must connect to citya
                 indexer := 0
                 for alien, _ := range alis {
-                        fmt.Println("Aggregator: deleting aliens.......", alien)
                         close(alien.commandChan)
                         delete(alis, alien)
                         delete(aliens, alien)
@@ -146,11 +132,19 @@ func cityCheckup(alien Alien, lookupCity map[string]map[string]bool, cityAlienLo
                 }
 
                 delete(lookupCity, city)
+                terminatorChan <- ali1 + "," + ali2
+                // for alien, _ := range alis {
+                //         fmt.Println("Aggregator: deleting aliens.......", alien)
+                //         close(alien.commandChan)
+                // }
+        } else {
+                fmt.Println("Aggregator: Everything seems ok, sending info to terminatorSumChan")
+                terminatorSumChan <- alien.name
         }
         fmt.Println("Aggregator: I'm in cityCheckup, lookupCity", lookupCity)
 }
 
-func consumer(alien Alien, terminatorChan chan int, aggregatorSignalChan chan Alien) {
+func consumer(alien Alien, aggregatorSignalChan chan Alien) {
         for {
                 _, more := <-alien.commandChan
                 if more {
@@ -158,7 +152,7 @@ func consumer(alien Alien, terminatorChan chan int, aggregatorSignalChan chan Al
                         aggregatorSignalChan <- alien
                 } else {
                         fmt.Println("Consumer: I'm done: ", alien.name)
-                        terminatorChan <- 1
+                        terminatorChan <- alien.name
                         return
                 }
         }
@@ -167,7 +161,7 @@ func consumer(alien Alien, terminatorChan chan int, aggregatorSignalChan chan Al
 
 
 // aggregator is in charge of collect the info from alien consumer and send the signal to aliencommander
-func Aggregator(ch chan Alien) {
+func Aggregator() {
         go func() {
                 fmt.Println("Aggregator, I'm in work...")
                 for {
@@ -189,23 +183,9 @@ func Aggregator(ch chan Alien) {
 
                                 cityCheckup(alien, cityLookup, cityAlienLookup)
 
-                                // if all the alive aliens finish their current move, then
-                                // we flush the signal to the next commander for the next round
-                                // if all aliens are destroyed, then end of the game
-                                if (len(aliens) == 0) {
-                                        fmt.Println("ALl the aliens had been destroyed, terminating the game")
-                                        close(aggregatorSignalChan)
-                                } else if (currentRoundFinish()){
-                                        fmt.Println("ALl aliens had made their move for the current round... Next round will start shortly...")
-                                        toCommanderSignalChan <- "continue"
-                                } else {
-                                        fmt.Println("aggregator just receive a signal from alien, waiting other aliens.. from ", alien)
-                                }
-
                         } else {
                                 toCommanderSignalChan <- "done"
                                 fmt.Println("ALl the aliens had been destroyed, terminating the game, done.....")
-                                close(aggregatorSignalChan)
                         }
                 }
         }()
@@ -214,23 +194,49 @@ func Aggregator(ch chan Alien) {
 
 func Terminator(size int){
         go func() {
-                total := 0
+                terminatorListDone = make(map[string]bool)
+                terminatorListReady = make(map[string]bool)
+
                 for {
-                        fmt.Println("Terminator: start to working on my summing job.....", total)
-                        n, more := <-terminatorChan
-                        fmt.Println("Terminator: I'm sumer and i'm about to served: ", n)
+                        fmt.Println("Terminator: I'm waiting here yo: ")
 
-                        if more {
-                                total += n
-                                fmt.Println("Terminator: I'm sumer, the current total is: ", total)
-                                if total == size{
+                        select {
+                        case names, more := <-terminatorChan :{
+                                fmt.Println("Terminator: in terminatorChan", names)
+                                if more {
+                                        for _, name := range strings.Split(names, ",") {
+                                                terminatorListDone[name] = true
+                                                delete(terminatorListReady, name)
+                                        }
+
+                                        fmt.Println("Terminator: I'm sumer, the current total is: ", len(terminatorListDone), ",", len(terminatorListReady))
+                                        if len(terminatorListDone) == size {
+                                                close(aggregatorSignalChan)
+                                                gateKeeperChan <- true
+                                                return
+                                        } else if (len(terminatorListDone) + len(terminatorListReady) == size) {
+                                                fmt.Println("Terminator: ALl aliens had made their move for the current round... Next round will start shortly...")
+                                                terminatorListReady = make(map[string]bool)
+                                                toCommanderSignalChan <- "continue"
+
+                                        }
+                                } else {
+                                        fmt.Println("Terminator: I'm done yo....: ")
                                         gateKeeperChan <- true
+                                        return
                                 }
+                        }
+                        case name, _ := <-terminatorSumChan :{
+                                fmt.Println("Terminator: in terminatorSumChan")
 
-                        } else {
-                                fmt.Println("Terminator: I'm done yo....: ", n)
-                                gateKeeperChan <- true
-                                return
+                                terminatorListReady[name] = true
+                                if (len(terminatorListDone) + len(terminatorListReady) == size) {
+                                        fmt.Println("Terminator: ALl aliens had made their move for the current round... Next round will start shortly...")
+                                        terminatorListReady = make(map[string]bool)
+                                        toCommanderSignalChan <- "continue"
+
+                                }
+                        }
                         }
                 }
         }()
@@ -318,11 +324,12 @@ func initParas(numOfAliens int, mapFile string) {
         // To notify commander that downstream are clear and ready to make the next move
         toCommanderSignalChan = make(chan string)
 
-        terminatorChan = make(chan int)
+        terminatorChan = make(chan string)
 
         gateKeeperChan = make(chan bool)
 
         aggregatorSignalChan = make(chan Alien)
+        terminatorSumChan = make(chan string)
 }
 
 
@@ -352,7 +359,7 @@ func main() {
         Terminator(numOfAliens)
 
         for alien, _ := range aliens {
-                go consumer(alien, terminatorChan, aggregatorSignalChan)
+                go consumer(alien, aggregatorSignalChan)
         }
 
         <-gateKeeperChan
