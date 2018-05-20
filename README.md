@@ -39,3 +39,11 @@ same format as the input file.
 Feel free to make assumptions (for example, that the city names will never
 contain numeric characters), but please add comments or assertions describing
 the assumptions you are making.
+
+
+
+How To Run:
+go run tendermint/FunAlien.go -numofaliens=4 -mapfile=$GOPATH/src/tenderfun/tendermint/test/testcase2.csv
+
+
+
