@@ -3,7 +3,7 @@ A challenge from Tendermint
 ![alt text](https://github.com/EdwinGuo/TenderFun/blob/master/HighLevelDiagram.png)
 
 
-##Alien invasion
+## Alien invasion
 Mad aliens are about to invade the earth and you are tasked with simulating the
 invasion.
 You are given a map containing the names of cities in the non-existent world of
@@ -43,7 +43,7 @@ the assumptions you are making.
 
 
 
-##How To Run:
+## How To Run:
 ```
 go run tendermint/FunAlien.go -numofaliens=4 -mapfile=$GOPATH/src/tenderfun/tendermint/test/testcase2.csv
 ```
