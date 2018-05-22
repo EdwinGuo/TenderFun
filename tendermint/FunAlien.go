@@ -365,5 +365,5 @@ func main() {
         }
 
         <-gateKeeperChan
-        fmt.Println("Cool, game finished, hope you enjoyed it!")
+        fmt.Println("Cool, game finish, hope you enjoyed it!")
 }
