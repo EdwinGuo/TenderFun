@@ -12,7 +12,7 @@ import (
 
 // Assume that each Alien will start at a random city
 // Assume that each Alien will move in a sequential fashion
-
+// Assume that
 
 // AlienCommander is the head of all the aliens, it control
 // the moves of them, alien commander will only stop under three condition
@@ -153,7 +153,7 @@ func consumer(alien Alien, aggregatorSignalChan chan Alien) {
         for {
                 _, more := <-alien.commandChan
                 if more {
-                        log.Debug("Consumer: Alien ", alien.name, "had been activated and is in motion!")
+                        log.Debug("Consumer: Alien ", alien.name, " had been activated and is in motion!")
                         aggregatorSignalChan <- alien
                 } else {
                         log.Debug("Consumer: I'm done: ", alien.name)
@@ -224,7 +224,6 @@ func Terminator(size int){
                                                 log.Debug("Terminator: ALl aliens had made their move for the current round... Next round will start shortly...")
                                                 terminatorListReady = make(map[string]bool)
                                                 toCommanderSignalChan <- "continue"
-
                                         }
                                 } else {
                                         log.Debug("Terminator: I'm done")
@@ -286,13 +285,46 @@ func GenerateAliens(num int, cities []string) map[Alien]Status {
 
         for ali := 1; ali <= num; ali++ {
                 name := "Alien-" + strconv.Itoa(ali)
-                ch := make(chan int)
                 city := util.RandCity(cities)
-                alien := Alien{name, ch}
-                status := Status{city, 0}
-                // initialize with 0
-                alis[alien] = status
+
+                // to fix the bug of n (n >1) aliens are born in
+                // the same city and next able to clear out
+                addAlien := true
+                for alien, status := range alis {
+                        if status.city == city{
+                                log.Infof("%s has been destroyed by %s and %s!\n", city, name, alien.name)
+                                delete(alis, alien)
+                                addAlien = false
+
+                                // remove from cities
+                                for index, str := range cities {
+                                        if str == city {
+                                                cities[len(cities)-1], cities[index] = cities[index], cities[len(cities)-1]
+                                                cities = cities[:len(cities)-1]
+                                                break
+                                        }
+                                }
+
+                                // remove from cityLookup(on both the key and value)
+                                for _, cmap := range cityLookup{
+                                        delete(cmap, city)
+                                }
+
+                                delete(cityLookup, city)
+
+                                break
+                        }
+                }
+
+                if addAlien {
+                        ch := make(chan int)
+                        alien := Alien{name, ch}
+                        status := Status{city, 0}
+                        // initialize with 0
+                        alis[alien] = status
+                }
         }
+
         log.Debug("Factory, my aliens: ", alis)
         return alis
 }
@@ -311,6 +343,8 @@ func GenerateCityALienLookup(aliens map[Alien]Status) map[string]map[Alien]bool 
         }
         return result
 }
+
+
 
 func initParas(numOfAliens int, mapFile string) {
         cityLookup = util.ParseCity(mapFile)
@@ -371,6 +405,7 @@ func main() {
 
         case "error":
                 log.SetLevel(log.ErrorLevel)
+
         case "fatal":
                 log.SetLevel(log.FatalLevel)
 
@@ -378,7 +413,6 @@ func main() {
                 log.SetLevel(log.PanicLevel)
 
         }
-
 
         initParas(numOfAliens, mapFile)
 
@@ -395,12 +429,24 @@ func main() {
 
         Aggregator()
 
-        Terminator(numOfAliens)
+        Terminator(len(aliens))
 
         for alien, _ := range aliens {
                 go consumer(alien, aggregatorSignalChan)
         }
 
         <-gateKeeperChan
+
+        if (len(cityLookup) == 0) {
+                log.Info("There is no city left!")
+        } else {
+                str := ""
+                for city, _ := range cityLookup {
+                        str += city + " "
+                }
+
+                log.Info("There city that are still exist is/are: ", str)
+        }
+
         log.Info("Cool, game finish, hope you enjoyed it!")
 }
