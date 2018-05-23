@@ -12,7 +12,6 @@ import (
 
 // Assume that each Alien will start at a random city
 // Assume that each Alien will move in a sequential fashion
-// Assume that
 
 // AlienCommander is the head of all the aliens, it control
 // the moves of them, alien commander will only stop under three condition
@@ -309,9 +308,7 @@ func GenerateAliens(num int, cities []string) map[Alien]Status {
                                 for _, cmap := range cityLookup{
                                         delete(cmap, city)
                                 }
-
                                 delete(cityLookup, city)
-
                                 break
                         }
                 }
@@ -370,6 +367,7 @@ func initParas(numOfAliens int, mapFile string) {
         gateKeeperChan = make(chan bool)
 
         aggregatorSignalChan = make(chan Alien)
+
         terminatorSumChan = make(chan string)
 }
 
