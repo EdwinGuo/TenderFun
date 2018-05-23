@@ -48,4 +48,4 @@ the assumptions you are making.
 go run tendermint/FunAlien.go -numofaliens=4 -mapfile=$GOPATH/src/tenderfun/tendermint/test/testcase2.csv
 ```
 
-
+![alt text](https://github.com/EdwinGuo/TenderFun/blob/master/RunExample.png)
